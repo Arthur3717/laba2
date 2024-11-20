@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32; 
 
 namespace WPFMatrixOperations
 {
@@ -27,6 +30,8 @@ namespace WPFMatrixOperations
 
             OnSquareMatrixChecked(null, null);
             SubscribeOnUI();
+
+            btnDownload.Click += OnDownloadButtonClick;
         }
 
         private void SubscribeOnUI()
@@ -48,6 +53,8 @@ namespace WPFMatrixOperations
             matrixDataGrid.CanUserSortColumns = false;
         }
 
+
+        // Обработка установки/снятия флажка "Квадратная матрица"
         private void OnSquareMatrixChecked(object sender, RoutedEventArgs e)
         {
             _isSquareMatrix = cbSquareMatrix.IsChecked.Value;
@@ -77,16 +84,33 @@ namespace WPFMatrixOperations
 
         private void OnMatrixCellEdit(object? sender, DataGridCellEditEndingEventArgs e)
         {
-            int x = e.Row.GetIndex();
-            int y = e.Column.DisplayIndex;
-            int value = Convert.ToInt32(((TextBox)e.EditingElement).Text);
-            _matrixController.ChangeValueForMatrixAt((DataGrid)sender, x, y, value);
+            if (e.EditingElement is TextBox textBox)
+            {
+                if (!int.TryParse(textBox.Text, out int value))
+                {
+                    MessageBox.Show("Некорректное значение. Пожалуйста, введите целое число.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    textBox.Text = "0"; // Возвращаем 0, если ввод некорректный
+                    return;
+                }
+
+                int x = e.Row.GetIndex();
+                int y = e.Column.DisplayIndex;
+                _matrixController.ChangeValueForMatrixAt((DataGrid)sender, x, y, value);
+            }
         }
 
         private void OnCalculateSumButtonClick(object sender, RoutedEventArgs e)
-        {            
+        {
+            
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+            
             matrixCDataGrid.Columns.Clear();
             matrixCDataGrid.ItemsSource = _matrixController.GetSumData();
+            stopwatch.Stop();
+
+            // Отображаем время в миллисекундах
+            tbTime.Text = stopwatch.ElapsedMilliseconds.ToString("F2") + " мс";
         }
 
         private void OnCalculateButtonClick(object sender, RoutedEventArgs e)
@@ -113,6 +137,58 @@ namespace WPFMatrixOperations
             {
                 int secondSize = Convert.ToInt32(tbSecondSizeInput.Text);
                 _matrixController.Size = (firstSize, secondSize);
+            }
+        }
+
+        private void OnDownloadButtonClick(object sender, RoutedEventArgs e)
+        {
+            // Получение результирующей матрицы (замените на ваш собственный метод)
+            _matrixController.FindSum(); // Сначала вызываем метод для вычисления суммы
+            int[,] resultMatrix1 = _matrixController.ResultMatrix.ToArray(); // Доступ к результирующей матрице через свойство
+
+            if (resultMatrix1 == null || resultMatrix1.GetLength(0) == 0)
+            {
+                MessageBox.Show("Нет данных для сохранения.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            SaveFileDialog saveFileDialog = new SaveFileDialog();
+            saveFileDialog.Filter = "CSV файлы (*.csv)|*.csv";
+            saveFileDialog.Title = "Сохранить результирующую матрицу";
+
+            if (saveFileDialog.ShowDialog() == true)
+            {
+                try
+                {
+
+                    SaveMatrixToCsv(resultMatrix1, saveFileDialog.FileName);
+
+                    MessageBox.Show("Матрица успешно сохранена в файл: " + saveFileDialog.FileName, "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Ошибка при сохранении матрицы: " + ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        // Сохраняет матрицу в файл CSV
+        private void SaveMatrixToCsv(int[,] matrix, string filePath)
+        {
+            using (StreamWriter writer = new StreamWriter(filePath))
+            {
+                int rows = matrix.GetLength(0);
+                int cols = matrix.GetLength(1);
+
+                for (int i = 0; i < rows; i++)
+                {
+                    string line = "";
+                    for (int j = 0; j < cols; j++)
+                    {
+                        line += matrix[i, j].ToString() + (j < cols - 1 ? ";" : ""); // Используется точка с запятой в качестве разделителя
+                    }
+                    writer.WriteLine(line);
+                }
             }
         }
 
